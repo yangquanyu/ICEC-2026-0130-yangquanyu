@@ -1,6 +1,23 @@
 {
-  "urls": ["https://jwc.example.edu.cn/notice/list.htm"],
-  "keywords": ["考试", "报名", "选课", "实验", "讲座", "放假", "提交", "截止"],
+  "urls": [
+    "https://www.ssti.net.cn/html/tzgg/index.html"
+  ],
+  "keywords": [
+    "通知",
+    "公示",
+    "选课",
+    "补考",
+    "重修",
+    "报名",
+    "申报",
+    "截止",
+    "放假",
+    "讲座",
+    "补助",
+    "奖学金",
+    "名单",
+    "考试"
+  ],
   "min_score": 2,
   "max_items": 50,
   "timeout_sec": 15
