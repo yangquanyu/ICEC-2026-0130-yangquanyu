@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-notice_watcher.py -- 校园通知哨兵 v1.0.0
+notice_watcher.py -- 校园通知哨兵 v1.1.0
 
 ICEC-2026 第二阶段 项目四：解决校园真实痛点的轻量化实用程序。
 
@@ -31,10 +31,10 @@ from datetime import datetime
 from html.parser import HTMLParser
 from pathlib import Path
 from urllib.error import HTTPError, URLError
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 from urllib.request import Request, urlopen
 
-VERSION = "v1.0.0"
+VERSION = "v1.1.0"
 
 BASE_DIR = Path(__file__).resolve().parent.parent            # 02-20Days-Challenge/
 CONFIG_PATH = Path(__file__).resolve().parent / "config.json"
@@ -54,33 +54,59 @@ DATE_IN_TEXT = re.compile(
     r"(20\d{2}[-/年]\d{1,2}[-/月]\d{1,2})|(\d{1,2}月\d{1,2}日)|([\[\(]\d{1,2}-\d{1,2}[\]\)])"
 )
 DATE_ISO = re.compile(r"(20\d{2})[-/年](\d{1,2})[-/月](\d{1,2})")
+# 列表条目尾部的标准日期（如 <span class="float_r">2026-11-16</span>）
+DATE_IN_TAIL = re.compile(r"(20\d{2})-(\d{1,2})-(\d{1,2})")
 STATE_MAX_ENTRIES = 500
 
 
 class LinkParser(HTMLParser):
-    """提取页面中全部 <a> 标签的 (文本, href)。"""
+    """提取列表页 <li><a>标题</a> ...尾部文本...</li> 结构中的 (标题, href, 尾部文本)。
+
+    通知列表页的日期通常不在 <a> 文本内，而放在同一 <li> 的后续元素里，
+    因此需要捕获 </a> 之后、</li> 之前的文本作为日期来源。
+    """
 
     def __init__(self):
         super().__init__(convert_charrefs=True)
-        self.links = []
+        self.items = []
         self._href = None
-        self._text_parts = []
+        self._title_parts = []
+        self._tail_parts = []
+        self._title_done = False
 
     def handle_starttag(self, tag, attrs):
-        if tag.lower() == "a":
+        t = tag.lower()
+        if t == "li":
+            # 新列表项开始：丢弃任何悬挂的链接状态。
+            # 面包屑导航等处的 <a> 不在 <li> 内，若不在此重置，
+            # 其状态会延续到下一个 </li>，把列表第一条通知整个吞掉。
+            self._href = None
+            self._title_parts = []
+            self._tail_parts = []
+            self._title_done = False
+        elif t == "a" and self._href is None:
             self._href = dict(attrs).get("href", "")
-            self._text_parts = []
+            self._title_parts = []
+            self._tail_parts = []
+            self._title_done = False
 
     def handle_data(self, data):
-        if self._href is not None:
-            self._text_parts.append(data)
+        if self._href is None:
+            return
+        if self._title_done:
+            self._tail_parts.append(data)
+        else:
+            self._title_parts.append(data)
 
     def handle_endtag(self, tag):
-        if tag.lower() == "a" and self._href is not None:
-            title = re.sub(r"\s+", " ", "".join(self._text_parts)).strip()
-            self.links.append((title, self._href))
+        t = tag.lower()
+        if t == "a" and self._href is not None:
+            self._title_done = True
+        elif t == "li" and self._href is not None:
+            title = re.sub(r"\s+", " ", "".join(self._title_parts)).strip()
+            tail = re.sub(r"\s+", " ", "".join(self._tail_parts)).strip()
+            self.items.append((title, self._href, tail))
             self._href = None
-            self._text_parts = []
 
 
 def load_config(path):
@@ -129,21 +155,28 @@ def notice_score(title, href, keywords):
 def parse_notices(html_text, base_url, keywords, min_score, max_items):
     parser = LinkParser()
     parser.feed(html_text)
+    base_netloc = urlparse(base_url).netloc
+    base_norm = base_url.rstrip("/")
     seen, items = set(), []
-    for title, href in parser.links:
+    for title, href, tail in parser.items:
         if not title or not href or href.startswith(("javascript:", "#", "mailto:")):
+            continue
+        full = urljoin(base_url, href)
+        # 过滤外站链接（侧边栏办事大厅、学籍查询等）与指向列表页自身的导航链接
+        if urlparse(full).netloc != base_netloc:
+            continue
+        if full.rstrip("/") == base_norm:
             continue
         if notice_score(title, href, keywords) < min_score:
             continue
-        full = urljoin(base_url, href)
         if full in seen:
             continue
         seen.add(full)
-        m = DATE_ISO.search(title)
+        m = DATE_IN_TAIL.search(tail) or DATE_ISO.search(title)
         items.append({
             "title": title,
             "url": full,
-            "date": "%04d-%02d-%02d" % (int(m.group(1)), int(m.group(2)), int(m.group(3))) if m else "",
+            "date": "%s-%02d-%02d" % (m.group(1), int(m.group(2)), int(m.group(3))) if m else "",
         })
     items.sort(key=lambda x: x["date"] or "0000-00-00", reverse=True)
     return items[:max_items]
