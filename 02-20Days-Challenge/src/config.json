@@ -1,0 +1,7 @@
+{
+  "urls": ["https://jwc.example.edu.cn/notice/list.htm"],
+  "keywords": ["考试", "报名", "选课", "实验", "讲座", "放假", "提交", "截止"],
+  "min_score": 2,
+  "max_items": 50,
+  "timeout_sec": 15
+}
