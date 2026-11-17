@@ -19,7 +19,6 @@ import re
 import time
 from pathlib import Path
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
 HERE = Path(__file__).resolve().parent
@@ -27,6 +26,25 @@ USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 )
+
+# 类别口径：主题类别（固定词表，与人工填表一致；按顺序匹配，先命中先归类）
+CATEGORY_RULES = [
+    (("补助", "认定", "奖学金", "奖助"), "奖助公示"),
+    (("招聘", "拟聘", "博士后", "资格复审", "考核成绩"), "人事招聘"),
+    (("补考", "统考"), "考试与补考"),
+    (("选课", "课程", "重修", "补修", "教材"), "选课与课程"),
+    (("学分", "申报"), "学分与申报"),
+    (("大赛", "竞赛", "选拔赛"), "赛事通知"),
+    (("入学", "须知", "新生"), "入学教育"),
+]
+
+
+def classify(title):
+    """按固定词表把通知标题归入主题类别；词表未命中归"其他"。"""
+    for kws, cat in CATEGORY_RULES:
+        if any(k in title for k in kws):
+            return cat
+    return "其他"
 
 
 def fetch(url, timeout=15):
@@ -56,10 +74,7 @@ def extract(html_text, url):
     date = dm.group(1) if dm else ""
     sm = re.search(r"来源[：:]\s*([^\s<　]{2,30})", html_text)
     source = sm.group(1).strip() if sm else ""
-    # 类别：URL 路径中的栏目名，如 /html/tzgg/29927.html -> tzgg
-    seg = [s for s in urlparse(url).path.split("/") if s and s != "html" and not s.endswith(".html")]
-    category = seg[0] if seg else ""
-    return title, date, source, category
+    return title, date, source, classify(title)
 
 
 def main():
