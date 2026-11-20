@@ -1,0 +1,78 @@
+<svg viewBox="0 0 680 320" xmlns="http://www.w3.org/2000/svg" font-family="Microsoft YaHei, PingFang SC, Noto Sans CJK SC, sans-serif">
+<rect width="680" height="320" fill="#ffffff"/>
+<text x="340" y="20" font-size="13" fill="#1f2937" text-anchor="middle" font-weight="bold">高峰排队指标趋势（队列人数 / 到达 / 服务完成）</text>
+<line x1="46" y1="274.0" x2="666" y2="274.0" stroke="#e5e7eb" stroke-width="1"/>
+<text x="41" y="277.0" font-size="10" fill="#6b7280" text-anchor="end">0</text>
+<line x1="46" y1="229.0" x2="666" y2="229.0" stroke="#e5e7eb" stroke-width="1"/>
+<text x="41" y="232.0" font-size="10" fill="#6b7280" text-anchor="end">6</text>
+<line x1="46" y1="184.0" x2="666" y2="184.0" stroke="#e5e7eb" stroke-width="1"/>
+<text x="41" y="187.0" font-size="10" fill="#6b7280" text-anchor="end">12</text>
+<line x1="46" y1="139.0" x2="666" y2="139.0" stroke="#e5e7eb" stroke-width="1"/>
+<text x="41" y="142.0" font-size="10" fill="#6b7280" text-anchor="end">18</text>
+<line x1="46" y1="94.0" x2="666" y2="94.0" stroke="#e5e7eb" stroke-width="1"/>
+<text x="41" y="97.0" font-size="10" fill="#6b7280" text-anchor="end">24</text>
+<line x1="46" y1="49.0" x2="666" y2="49.0" stroke="#e5e7eb" stroke-width="1"/>
+<text x="41" y="52.0" font-size="10" fill="#6b7280" text-anchor="end">30</text>
+<rect x="52.0" y="274.0" width="12.4" height="0.0" fill="#93c5fd"/>
+<rect x="66.4" y="274.0" width="12.4" height="0.0" fill="#86efac"/>
+<rect x="90.7" y="221.5" width="12.4" height="52.5" fill="#93c5fd"/>
+<rect x="105.1" y="229.0" width="12.4" height="45.0" fill="#86efac"/>
+<rect x="129.5" y="236.5" width="12.4" height="37.5" fill="#93c5fd"/>
+<rect x="143.9" y="229.0" width="12.4" height="45.0" fill="#86efac"/>
+<rect x="168.2" y="206.5" width="12.4" height="67.5" fill="#93c5fd"/>
+<rect x="182.6" y="229.0" width="12.4" height="45.0" fill="#86efac"/>
+<rect x="207.0" y="236.5" width="12.4" height="37.5" fill="#93c5fd"/>
+<rect x="221.4" y="229.0" width="12.4" height="45.0" fill="#86efac"/>
+<rect x="245.7" y="259.0" width="12.4" height="15.0" fill="#93c5fd"/>
+<rect x="260.1" y="229.0" width="12.4" height="45.0" fill="#86efac"/>
+<rect x="284.5" y="251.5" width="12.4" height="22.5" fill="#93c5fd"/>
+<rect x="298.9" y="229.0" width="12.4" height="45.0" fill="#86efac"/>
+<rect x="323.2" y="266.5" width="12.4" height="7.5" fill="#93c5fd"/>
+<rect x="337.6" y="229.0" width="12.4" height="45.0" fill="#86efac"/>
+<rect x="362.0" y="236.5" width="12.4" height="37.5" fill="#93c5fd"/>
+<rect x="376.4" y="229.0" width="12.4" height="45.0" fill="#86efac"/>
+<rect x="400.7" y="251.5" width="12.4" height="22.5" fill="#93c5fd"/>
+<rect x="415.1" y="229.0" width="12.4" height="45.0" fill="#86efac"/>
+<rect x="439.5" y="199.0" width="12.4" height="75.0" fill="#93c5fd"/>
+<rect x="453.9" y="229.0" width="12.4" height="45.0" fill="#86efac"/>
+<rect x="478.2" y="229.0" width="12.4" height="45.0" fill="#93c5fd"/>
+<rect x="492.6" y="229.0" width="12.4" height="45.0" fill="#86efac"/>
+<rect x="517.0" y="266.5" width="12.4" height="7.5" fill="#93c5fd"/>
+<rect x="531.4" y="229.0" width="12.4" height="45.0" fill="#86efac"/>
+<rect x="555.7" y="274.0" width="12.4" height="0.0" fill="#93c5fd"/>
+<rect x="570.1" y="229.0" width="12.4" height="45.0" fill="#86efac"/>
+<rect x="594.5" y="259.0" width="12.4" height="15.0" fill="#93c5fd"/>
+<rect x="608.9" y="229.0" width="12.4" height="45.0" fill="#86efac"/>
+<rect x="633.2" y="266.5" width="12.4" height="7.5" fill="#93c5fd"/>
+<rect x="647.6" y="259.0" width="12.4" height="15.0" fill="#86efac"/>
+<polyline points="65.4,71.5 104.1,64.0 142.9,71.5 181.6,49.0 220.4,56.5 259.1,86.5 297.9,109.0 336.6,146.5 375.4,154.0 414.1,176.5 452.9,146.5 491.6,146.5 530.4,184.0 569.1,229.0 607.9,259.0 646.6,266.5" fill="none" stroke="#dc2626" stroke-width="2.2"/>
+<circle cx="65.4" cy="71.5" r="3" fill="#dc2626"/>
+<circle cx="104.1" cy="64.0" r="3" fill="#dc2626"/>
+<circle cx="142.9" cy="71.5" r="3" fill="#dc2626"/>
+<circle cx="181.6" cy="49.0" r="3" fill="#dc2626"/>
+<circle cx="220.4" cy="56.5" r="3" fill="#dc2626"/>
+<circle cx="259.1" cy="86.5" r="3" fill="#dc2626"/>
+<circle cx="297.9" cy="109.0" r="3" fill="#dc2626"/>
+<circle cx="336.6" cy="146.5" r="3" fill="#dc2626"/>
+<circle cx="375.4" cy="154.0" r="3" fill="#dc2626"/>
+<circle cx="414.1" cy="176.5" r="3" fill="#dc2626"/>
+<circle cx="452.9" cy="146.5" r="3" fill="#dc2626"/>
+<circle cx="491.6" cy="146.5" r="3" fill="#dc2626"/>
+<circle cx="530.4" cy="184.0" r="3" fill="#dc2626"/>
+<circle cx="569.1" cy="229.0" r="3" fill="#dc2626"/>
+<circle cx="607.9" cy="259.0" r="3" fill="#dc2626"/>
+<circle cx="646.6" cy="266.5" r="3" fill="#dc2626"/>
+<text x="65.4" y="290" font-size="10" fill="#6b7280" text-anchor="middle">12:01</text>
+<text x="181.6" y="290" font-size="10" fill="#6b7280" text-anchor="middle">12:07</text>
+<text x="297.9" y="290" font-size="10" fill="#6b7280" text-anchor="middle">12:13</text>
+<text x="414.1" y="290" font-size="10" fill="#6b7280" text-anchor="middle">12:19</text>
+<text x="530.4" y="290" font-size="10" fill="#6b7280" text-anchor="middle">12:25</text>
+<text x="646.6" y="290" font-size="10" fill="#6b7280" text-anchor="middle">12:31</text>
+<line x1="46" y1="274" x2="666" y2="274" stroke="#9ca3af" stroke-width="1"/>
+<rect x="54" y="39" width="10" height="10" fill="#dc2626"/>
+<text x="68" y="48" font-size="10" fill="#374151">队列人数</text>
+<rect x="132" y="39" width="10" height="10" fill="#93c5fd"/>
+<text x="146" y="48" font-size="10" fill="#374151">到达</text>
+<rect x="210" y="39" width="10" height="10" fill="#86efac"/>
+<text x="224" y="48" font-size="10" fill="#374151">服务完成</text>
+</svg>

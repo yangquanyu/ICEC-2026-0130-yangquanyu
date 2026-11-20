@@ -96,6 +96,7 @@ def analyze(rows, interval_min, servers):
         "n": n, "duration": duration, "A": A, "C": C, "lam": lam, "thr": thr,
         "L": L, "avg_sec": avg_sec, "mu": mu, "rho": rho, "W": W, "slope": sl,
         "backlog": backlog, "qmax": max(q) if q else 0,
+        "q_first": q[0] if q else None, "q_last": q[-1] if q else None,
     }
 
 
@@ -109,6 +110,8 @@ def verdict(m):
         out.append("**系统不稳定**：%d 分钟内队列以约 %.1f 人/分钟的速度持续增长（峰值 %d 人），到达已超过服务能力，队尾会不断后移。" % (m["duration"], m["slope"], m["qmax"]))
     if len(m["backlog"]) >= m["n"] * 0.4:
         out.append("**积压频发**：%d/%d 个采样间隔内到达大于服务完成，队列只增不减的时段占四成以上。" % (len(m["backlog"]), m["n"]))
+    if m["q_first"] is not None and m["q_last"] is not None and m["q_first"] - m["q_last"] >= 5:
+        out.append("**观测窗口处于高峰后的衰减段**：队列由 %d 人降至 %d 人（净减 %d 人），到达率持续低于系统吞吐——说明采样开始前高峰已把队列堆到 %d 人，真正的瓶颈发生在观测窗口之前，需结合供餐节奏判断高峰起点。" % (m["q_first"], m["q_last"], m["q_first"] - m["q_last"], m["q_first"]))
     if not out:
         out.append("**系统整体稳定**：未出现持续积压，排队主要来自到达时刻集中造成的短时拥堵。")
     return out
