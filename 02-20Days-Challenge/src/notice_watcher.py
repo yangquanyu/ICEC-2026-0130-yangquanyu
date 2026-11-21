@@ -34,7 +34,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urljoin, urlparse
 from urllib.request import Request, urlopen
 
-VERSION = "v1.1.0"
+VERSION = "v1.2.0"
 
 BASE_DIR = Path(__file__).resolve().parent.parent            # 02-20Days-Challenge/
 CONFIG_PATH = Path(__file__).resolve().parent / "config.json"
@@ -121,20 +121,33 @@ def load_config(path):
     return cfg
 
 
-def fetch(url, timeout_sec):
-    """请求页面并返回文本；依次尝试响应声明的编码、UTF-8、GB18030。失败抛异常。"""
-    req = Request(url, headers={"User-Agent": USER_AGENT, "Accept-Language": "zh-CN,zh;q=0.9"})
-    with urlopen(req, timeout=timeout_sec) as resp:
-        raw = resp.read()
-        declared = resp.headers.get_content_charset()
-    for enc in (declared, "utf-8", "gb18030"):
-        if not enc:
-            continue
+def fetch(url, timeout_sec, retries=2):
+    """请求页面并返回 (文本, 实际尝试次数)。
+
+    编码依次尝试响应声明 -> UTF-8 -> GB18030。
+    网络层错误（SSL 重置、连接中断、超时）按指数退避重试：
+    第 1 次失败等 2 秒、第 2 次失败等 4 秒后再试，仍失败则抛出最后一次异常。
+    """
+    last = None
+    for attempt in range(retries + 1):
         try:
-            return raw.decode(enc)
-        except (UnicodeDecodeError, LookupError):
-            continue
-    return raw.decode("utf-8", errors="replace")
+            req = Request(url, headers={"User-Agent": USER_AGENT, "Accept-Language": "zh-CN,zh;q=0.9"})
+            with urlopen(req, timeout=timeout_sec) as resp:
+                raw = resp.read()
+                declared = resp.headers.get_content_charset()
+            for enc in (declared, "utf-8", "gb18030"):
+                if not enc:
+                    continue
+                try:
+                    return raw.decode(enc), attempt + 1
+                except (UnicodeDecodeError, LookupError):
+                    continue
+            return raw.decode("utf-8", errors="replace"), attempt + 1
+        except (URLError, HTTPError, OSError) as exc:
+            last = exc
+            if attempt < retries:
+                time.sleep(2.0 * (2 ** attempt))
+    raise last
 
 
 def notice_score(title, href, keywords):
@@ -240,10 +253,11 @@ def log_telemetry(record):
 def run_once(cfg, dry_run=False):
     started = time.time()
     run_ts = datetime.now().astimezone().isoformat(timespec="seconds")
-    errors, all_items, urls_ok = [], [], 0
+    errors, all_items, urls_ok, fetch_attempts = [], [], 0, 0
     for url in cfg["urls"]:
         try:
-            html_text = fetch(url, cfg["timeout_sec"])
+            html_text, attempts = fetch(url, cfg["timeout_sec"])
+            fetch_attempts += attempts
             all_items.extend(parse_notices(html_text, url, cfg["keywords"], cfg["min_score"], cfg["max_items"]))
             urls_ok += 1
         except (URLError, HTTPError, OSError, ValueError) as exc:
@@ -282,6 +296,7 @@ def run_once(cfg, dry_run=False):
         "items_total": stats["items_total"],
         "items_new": len(new_items),
         "new_titles": [it["title"] for it in new_items[:10]],
+        "fetch_attempts": fetch_attempts,
         "dry_run": dry_run,
         "errors": errors,
     }
