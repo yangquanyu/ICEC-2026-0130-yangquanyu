@@ -20,5 +20,6 @@
   ],
   "min_score": 2,
   "max_items": 50,
-  "timeout_sec": 15
+  "timeout_sec": 15,
+  "detail_max": 20
 }

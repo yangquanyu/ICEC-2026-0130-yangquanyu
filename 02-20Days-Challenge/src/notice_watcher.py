@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-notice_watcher.py -- 校园通知哨兵 v1.1.0
+notice_watcher.py -- 校园通知哨兵 v1.3.0
 
 ICEC-2026 第二阶段 项目四：解决校园真实痛点的轻量化实用程序。
 
@@ -13,7 +13,10 @@ ICEC-2026 第二阶段 项目四：解决校园真实痛点的轻量化实用程
   1. 仅依赖 Python 3.8+ 标准库，零第三方包；
   2. 自动处理 UTF-8 / GBK 系中文网页编码；
   3. 每次运行向 process_logs/ 追加一条 JSONL 遥测记录（时间戳、耗时、抓取数、报错）；
-  4. --dry-run 模式只抓取解析，不更新状态、不写日报，用于调试。
+  4. 网络层错误指数退避重试（3 次尝试，2s/4s）；
+  5. 对新增通知抓取详情页，提取截止时间/发布单位/面向对象/一句话摘要，
+     按截止时间升序输出日报，3 天内截止高亮（v1.3.0，8 位用户反馈驱动）；
+  6. --dry-run 模式只抓取解析，不更新状态、不写日报，用于调试。
 
 用法：
   python notice_watcher.py              # 运行一次
@@ -22,19 +25,20 @@ ICEC-2026 第二阶段 项目四：解决校园真实痛点的轻量化实用程
 
 import argparse
 import hashlib
+import html as html_lib
 import json
 import re
 import sys
 import time
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from html.parser import HTMLParser
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.parse import urljoin, urlparse
 from urllib.request import Request, urlopen
 
-VERSION = "v1.2.0"
+VERSION = "v1.3.0"
 
 BASE_DIR = Path(__file__).resolve().parent.parent            # 02-20Days-Challenge/
 CONFIG_PATH = Path(__file__).resolve().parent / "config.json"
@@ -49,6 +53,25 @@ USER_AGENT = (
 
 # 通知链接的 URL 路径特征词（命中任一 -> 加分）
 URL_HINTS = ("notice", "news", "info", "article", "xinxifabu", "tzgg", "detail", "/20")
+
+# 主题类别词表（与课题 10 实验同一套口径，按顺序匹配，先命中先归类）
+CATEGORY_RULES = [
+    (("补助", "认定", "奖学金", "奖助"), "奖助公示"),
+    (("招聘", "拟聘", "博士后", "资格复审", "考核成绩"), "人事招聘"),
+    (("补考", "统考"), "考试与补考"),
+    (("选课", "课程", "重修", "补修", "教材"), "选课与课程"),
+    (("学分", "申报"), "学分与申报"),
+    (("大赛", "竞赛", "选拔赛"), "赛事通知"),
+    (("入学", "须知", "新生"), "入学教育"),
+]
+
+
+def classify(title):
+    """按固定词表把通知标题归入主题类别；词表未命中归"其他"。"""
+    for kws, cat in CATEGORY_RULES:
+        if any(k in title for k in kws):
+            return cat
+    return "其他"
 # 标题中的日期特征（命中 -> 加分）
 DATE_IN_TEXT = re.compile(
     r"(20\d{2}[-/年]\d{1,2}[-/月]\d{1,2})|(\d{1,2}月\d{1,2}日)|([\[\(]\d{1,2}-\d{1,2}[\]\)])"
@@ -212,33 +235,124 @@ def save_seen(seen):
         json.dump({"seen": dict(items[-STATE_MAX_ENTRIES:])}, f, ensure_ascii=False, indent=2)
 
 
+def extract_deadline(text, today=None):
+    """从正文提取截止时间，返回 YYYY-MM-DD 或空串。
+
+    只认两类表述：①"X月X日…前/止/截止"；②"截止/请于…X月X日"。
+    事件日期（"定于X月X日进行"）不含截止语义，不误判。
+    缺年份时按当前年推断；若推断结果已过去 30 天以上，则归为明年。
+    """
+    today = today or date.today()
+    for pat, has_year in (
+        (r"(\d{4})年(\d{1,2})月(\d{1,2})日[^。；\s]{0,12}(?:前|以前|之前|止|截止)", True),
+        (r"(\d{1,2})月(\d{1,2})日[^。；\s]{0,12}(?:前|以前|之前|止|截止)", False),
+        (r"(?:截止|请于)[：:\s]*(\d{4})?年?(\d{1,2})月(\d{1,2})日", None),
+    ):
+        m = re.search(pat, text)
+        if not m:
+            continue
+        g = m.groups()
+        try:
+            if has_year:
+                dl = date(int(g[0]), int(g[1]), int(g[2]))
+            elif has_year is False:
+                dl = date(today.year, int(g[0]), int(g[1]))
+                if (today - dl).days > 30:
+                    dl = date(today.year + 1, int(g[0]), int(g[1]))
+            else:
+                dl = date(int(g[0] or today.year), int(g[1]), int(g[2]))
+        except ValueError:
+            continue
+        return dl.isoformat()
+    return ""
+
+
+AUDIENCE_TOKENS = ("全体新生", "全体学生", "全体师生", "毕业班学生", "相关教师", "各班级", "教学单位")
+
+
+def extract_detail(raw_html):
+    """从通知详情页提取 (来源, 截止时间, 面向对象, 摘要)；提不到的字段返回空串，不编造。"""
+    source = ""
+    m = re.search(r"来源[：:]\s*([^\s<　]{2,30})", raw_html)
+    if m:
+        source = m.group(1).strip()
+    # 先剥离注释/脚本/样式，避免把 HTML 注释与 JS 残渣当正文
+    clean = re.sub(r"<!--.*?-->", " ", raw_html, flags=re.S)
+    clean = re.sub(r"<script.*?</script>", " ", clean, flags=re.S)
+    clean = re.sub(r"<style.*?</style>", " ", clean, flags=re.S)
+    text = html_lib.unescape(re.sub(r"<[^>]+>", " ", clean))
+    text = re.sub(r"\s+", " ", text).strip()
+    deadline = extract_deadline(text)
+    audience = ""
+    for tok in AUDIENCE_TOKENS:
+        if tok in text:
+            audience = tok
+            break
+    if not audience:
+        am = re.search(r"(20\d{2}级[^。；，\s]{0,8}学生|\d{4}届[^。；，\s]{0,8}学生)", text)
+        if am:
+            audience = am.group(1)[:20]
+    summary = ""
+    pm = re.search(r"发布时间[：:][0-9\-: ]+", text)
+    body = text[pm.end():].strip(" 　") if pm else text
+    body = re.sub(r"^[\s\S]{0,30}?-->", "", body).strip()  # 兜底去残留注释尾
+    sm = re.search(r"^[^。；！]{%d,%d}[。；！]" % (10, 60), body)
+    if sm:
+        summary = sm.group(0).strip()
+    elif len(body) >= 10:
+        summary = body[:50]
+    return source, deadline, audience, summary
+
+
 def write_digest(new_items, run_ts, stats):
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     path = OUTPUT_DIR / ("digest-%s.md" % run_ts[:10])
-    lines = [
+    L = [
         "# 校园通知日报 %s" % run_ts[:10],
         "",
+        "- 抓取日期：%s（与条目内的通知发布日期不同，抓取日期是本次运行日期）" % run_ts[:10],
         "- 生成时间：%s" % run_ts,
         "- 程序版本：%s" % VERSION,
         "- 扫描页面：%d 个（成功 %d / 失败 %d）" % (stats["urls_total"], stats["urls_ok"], stats["urls_failed"]),
-        "- 识别通知：%d 条，其中新增：%d 条" % (stats["items_total"], len(new_items)),
-        "",
-        "## 新增通知",
+        "- 新增通知：%d 条" % len(new_items),
         "",
     ]
-    if new_items:
-        for i, it in enumerate(new_items, 1):
-            lines.append("%d. [%s](%s) （%s）" % (i, it["title"], it["url"], it["date"] or "日期未标注"))
+    if not new_items:
+        L += ["## 今日无新增通知", "", "官网通知公告栏本次运行没有新增条目。", ""]
     else:
-        lines.append("本次运行没有新增通知。")
-    lines += [
-        "",
-        "## 说明",
-        "",
-        "本日报由 notice_watcher %s 自动生成，数据来源于 config.json 配置的校园通知页面。" % VERSION,
-        "",
-    ]
-    path.write_text("\n".join(lines), encoding="utf-8")
+        today = date.today()
+        rows = []
+        for it in new_items:
+            dl = it.get("deadline", "")
+            mark = ""
+            if dl:
+                delta = (date.fromisoformat(dl) - today).days
+                if 0 <= delta <= 3:
+                    mark = " **⏰%d天后截止**" % delta
+                elif delta < 0:
+                    mark = " （已截止）"
+            rows.append((dl or "9999-99-99", it.get("date") or "0000-00-00", it, mark))
+        rows.sort(key=lambda r: (r[0], r[1]))
+        L += [
+            "## 新增通知（按截止时间升序，无截止时间的排在后面）",
+            "",
+            "| 标题 | 分类 | 发布日期 | 截止时间 | 发布单位 | 面向对象 | 链接 |",
+            "|---|---|---|---|---|---|---|",
+        ]
+        for _, _, it, mark in rows:
+            L.append("| %s%s | %s | %s | %s | %s | %s | [打开](%s) |" % (
+                it["title"], mark, it.get("category", ""), it.get("date", ""),
+                it.get("deadline", "") or "未注明", it.get("source", ""),
+                it.get("audience", "") or "未注明", it["url"]))
+        L.append("")
+        summaries = [it for it in new_items if it.get("summary")]
+        if summaries:
+            L += ["## 一句话摘要", ""]
+            for it in summaries[:10]:
+                L.append("- **%s**：%s" % (it["title"][:24], it["summary"]))
+            L.append("")
+    L += ["---", "", "本日报由 notice_watcher %s 自动生成；截止时间与面向对象为正则提取，提不到时标注'未注明'，不做猜测。" % VERSION, ""]
+    path.write_text("\n".join(L), encoding="utf-8")
     return path
 
 
@@ -272,6 +386,24 @@ def run_once(cfg, dry_run=False):
             if not dry_run:
                 seen[key] = {"title": it["title"], "first_seen": run_ts}
 
+    # 主题标签对所有新增通知免费可打；详情页字段（截止时间/来源/面向对象/摘要）
+    # 只对前 detail_max 条抓取，控制单次运行的请求量
+    for it in new_items:
+        it["category"] = classify(it["title"])
+    detail_max = cfg.get("detail_max", 20)
+    detail_fetched, deadline_found = 0, 0
+    for it in new_items[:detail_max]:
+        try:
+            raw, _ = fetch(it["url"], cfg["timeout_sec"])
+            source, deadline, audience, summary = extract_detail(raw)
+            it["source"], it["deadline"] = source, deadline
+            it["audience"], it["summary"] = audience, summary
+            detail_fetched += 1
+            if deadline:
+                deadline_found += 1
+        except (URLError, HTTPError, OSError, ValueError) as exc:
+            errors.append({"stage": "detail", "url": it["url"], "msg": "%s: %s" % (type(exc).__name__, exc)})
+
     stats = {
         "urls_total": len(cfg["urls"]),
         "urls_ok": urls_ok,
@@ -296,15 +428,17 @@ def run_once(cfg, dry_run=False):
         "items_total": stats["items_total"],
         "items_new": len(new_items),
         "new_titles": [it["title"] for it in new_items[:10]],
+        "detail_fetched": detail_fetched,
+        "deadline_found": deadline_found,
         "fetch_attempts": fetch_attempts,
         "dry_run": dry_run,
         "errors": errors,
     }
     log_path = log_telemetry(record)
 
-    print("[%s] %s | 页面 %d/%d 成功 | 识别 %d 条 | 新增 %d 条 | 耗时 %dms"
+    print("[%s] %s | 页面 %d/%d 成功 | 识别 %d 条 | 新增 %d 条 | 详情抓取 %d（含截止 %d）| 耗时 %dms"
           % (VERSION, status.upper(), urls_ok, len(cfg["urls"]),
-             len(all_items), len(new_items), record["duration_ms"]))
+             len(all_items), len(new_items), detail_fetched, deadline_found, record["duration_ms"]))
     for it in new_items:
         print("  + [%s] %s" % (it["date"] or "----", it["title"]))
     print("遥测日志：%s" % log_path)
