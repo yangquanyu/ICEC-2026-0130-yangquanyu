@@ -89,12 +89,13 @@ def analyze(rows, interval_min, servers):
     mu = 60.0 / avg_sec if avg_sec else None          # 单服务台服务率 人/分
     rho = lam / (servers * mu) if mu else None        # 利用率
     W = L / lam if lam else None                      # Little 定律：平均停留时间（分）
+    Wq = (W - avg_sec / 60.0) if (W is not None and avg_sec) else None  # 纯排队等待 = 停留 − 服务耗时
     sl = slope(q) / interval_min                     # 队列增长斜率（人/分钟）
     backlog = [(rows[i]["time"], rows[i]["arrivals"], rows[i]["served"])
                for i in range(n) if rows[i]["arrivals"] > rows[i]["served"]]
     return {
         "n": n, "duration": duration, "A": A, "C": C, "lam": lam, "thr": thr,
-        "L": L, "avg_sec": avg_sec, "mu": mu, "rho": rho, "W": W, "slope": sl,
+        "L": L, "avg_sec": avg_sec, "mu": mu, "rho": rho, "W": W, "Wq": Wq, "slope": sl,
         "backlog": backlog, "qmax": max(q) if q else 0,
         "q_first": q[0] if q else None, "q_last": q[-1] if q else None,
     }
@@ -203,7 +204,9 @@ def write_report(m, rows, servers, interval_min, path):
     if m["rho"] is not None:
         L.append("| 服务台利用率 ρ | %.0f%% | λ / (服务台数 × μ)，>85%% 视为饱和 |" % (m["rho"] * 100))
     if m["W"] is not None:
-        L.append("| 平均停留时间 W | %.1f 分钟 | Little 定律：L = λ × W |" % m["W"])
+        L.append("| 平均停留时间 W | %.1f 分钟 | Little 定律：L = λ × W；系统内停留，含约 %.0f 分钟服务 |" % (m["W"], (m["avg_sec"] or 0) / 60.0))
+    if m["Wq"] is not None:
+        L.append("| 平均排队等待 Wq | %.1f 分钟 | W − 平均单次服务耗时，即纯排队时间 |" % m["Wq"])
     L.append("| 队列增长斜率 | %.2f 人/分钟 | >0.2 视为持续增长（不稳定）|" % m["slope"])
     L.append("| 队列峰值 | %d 人 | 观测到的最大队长 |" % m["qmax"])
     L.append("")
